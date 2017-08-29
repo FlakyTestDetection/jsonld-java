@@ -1,5 +1,7 @@
 package com.github.jsonldjava.core;
 
+import com.github.jsonldjava.core.JsonLdConsts.Embed;
+
 /**
  * The JsonLdOptions type as specified in the
  * <a href="http://www.w3.org/TR/json-ld-api/#the-jsonldoptions-type">JSON-LD-
@@ -9,6 +11,12 @@ package com.github.jsonldjava.core;
  *
  */
 public class JsonLdOptions {
+
+    public static final String JSON_LD_1_0 = "json-ld-1.0";
+
+    public static final String JSON_LD_1_1 = "json-ld-1.1";
+    
+    public static final String JSON_LD_1_1_FRAME = "json-ld-1.1-expand-frame";
 
     public static final boolean DEFAULT_COMPACT_ARRAYS = true;
 
@@ -47,7 +55,7 @@ public class JsonLdOptions {
     /**
      * http://www.w3.org/TR/json-ld-api/#widl-JsonLdOptions-processingMode
      */
-    private String processingMode = "json-ld-1.0";
+    private String processingMode = JSON_LD_1_0;
     /**
      * http://www.w3.org/TR/json-ld-api/#widl-JsonLdOptions-documentLoader
      */
@@ -55,9 +63,11 @@ public class JsonLdOptions {
 
     // Frame options : http://json-ld.org/spec/latest/json-ld-framing/
 
-    private Boolean embed = null;
+    private Embed embed = Embed.LAST;
     private Boolean explicit = null;
     private Boolean omitDefault = null;
+    private Boolean pruneBlankNodeIdentifiers = true;
+    private Boolean requireAll = false;
 
     // RDF conversion options :
     // http://www.w3.org/TR/json-ld-api/#serialize-rdf-as-json-ld-algorithm
@@ -66,12 +76,44 @@ public class JsonLdOptions {
     Boolean useNativeTypes = false;
     private boolean produceGeneralizedRdf = false;
 
-    public Boolean getEmbed() {
-        return embed;
+    public String getEmbed() {
+        switch (this.embed) {
+        case ALWAYS:
+            return "@always";
+        case NEVER:
+            return "@never";
+        case LINK:
+            return "@link";
+        default:
+            return "@last";
+        }
+    }
+
+    Embed getEmbedVal() {
+        return this.embed;
     }
 
     public void setEmbed(Boolean embed) {
-        this.embed = embed;
+        this.embed = embed ? Embed.LAST : Embed.NEVER;
+    }
+
+    public void setEmbed(String embed) throws JsonLdError {
+        switch (embed) {
+        case "@always":
+            this.embed = Embed.ALWAYS;
+            break;
+        case "@never":
+            this.embed = Embed.NEVER;
+            break;
+        case "@last":
+            this.embed = Embed.LAST;
+            break;
+        case "@link":
+            this.embed = Embed.LINK;
+            break;
+        default:
+            throw new JsonLdError(JsonLdError.Error.INVALID_EMBED_VALUE);
+        }
     }
 
     public Boolean getExplicit() {
@@ -88,6 +130,25 @@ public class JsonLdOptions {
 
     public void setOmitDefault(Boolean omitDefault) {
         this.omitDefault = omitDefault;
+    }
+
+    public Boolean getPruneBlankNodeIdentifiers() {
+        return pruneBlankNodeIdentifiers && getProcessingMode().equals(JSON_LD_1_1);
+    }
+
+    public void setPruneBlankNodeIdentifiers(Boolean pruneBlankNodeIdentifiers) {
+        if(pruneBlankNodeIdentifiers) {
+            setProcessingMode(JSON_LD_1_1);
+        }
+        this.pruneBlankNodeIdentifiers = pruneBlankNodeIdentifiers;
+    }
+
+    public Boolean getRequireAll() {
+        return this.requireAll;
+    }
+
+    public void setRequireAll(Boolean requireAll) {
+        this.requireAll = requireAll;
     }
 
     public Boolean getCompactArrays() {
@@ -159,4 +220,5 @@ public class JsonLdOptions {
     public String format = null;
     public Boolean useNamespaces = false;
     public String outputForm = null;
+
 }

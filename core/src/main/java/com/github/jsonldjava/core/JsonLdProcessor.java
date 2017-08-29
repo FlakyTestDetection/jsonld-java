@@ -4,9 +4,15 @@ import static com.github.jsonldjava.utils.Obj.newMap;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.Map.Entry;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.github.jsonldjava.core.JsonLdError.Error;
 import com.github.jsonldjava.impl.NQuadRDFParser;
@@ -302,13 +308,25 @@ public class JsonLdProcessor {
         }
         // TODO string/IO input
 
+        // 2. Set expanded input to the result of using the expand method using input and options. 
         final Object expandedInput = expand(input, opts);
+        
+        // 3. Set expanded frame to the result of using the expand method using frame and options
+        // with expandContext set to null and processingMode set to json-ld-1.1-expand-frame. 
+        String savedProcessingMode = opts.getProcessingMode();
+        Object savedExpandedContext = opts.getExpandContext();
+        opts.setProcessingMode(JsonLdOptions.JSON_LD_1_1_FRAME);
+        opts.setExpandContext(null);
         final List<Object> expandedFrame = expand(frame, opts);
+        opts.setProcessingMode(savedProcessingMode);
+        opts.setExpandContext(savedExpandedContext);
 
+        // 4. Set context to the value of @context from frame, if it exists, or to a new empty
+        // context, otherwise.
         final JsonLdApi api = new JsonLdApi(expandedInput, opts);
-        final List<Object> framed = api.frame(expandedInput, expandedFrame);
         final Context activeCtx = api.context
                 .parse(((Map<String, Object>) frame).get(JsonLdConsts.CONTEXT));
+        final List<Object> framed = api.frame(expandedInput, expandedFrame);
 
         Object compacted = api.compact(activeCtx, null, framed, opts.getCompactArrays());
         if (!(compacted instanceof List)) {
@@ -319,8 +337,29 @@ public class JsonLdProcessor {
         final String alias = activeCtx.compactIri(JsonLdConsts.GRAPH);
         final Map<String, Object> rval = activeCtx.serialize();
         rval.put(alias, compacted);
-        JsonLdUtils.removePreserve(activeCtx, rval, opts);
+
+        Set<Object> toPrune = opts.getPruneBlankNodeIdentifiers() ? blankNodeIdsToPrune(rval) : Collections.emptySet();
+        JsonLdUtils.removePreserveAndPrune(activeCtx, rval, opts, toPrune);
         return rval;
+    }
+
+    private static Set<Object> blankNodeIdsToPrune(final Map<String, Object> rval) {
+        return countBlankNodeIds(rval, new HashMap<>()).entrySet().stream().filter(e -> e.getValue() == 1)
+                .map(e -> e.getKey()).collect(Collectors.toSet());
+    }
+
+    private static Map<Object, Integer> countBlankNodeIds(Object input, Map<Object, Integer> frequencies) {
+        if (input instanceof List) {
+            ((List<?>) input).forEach(e -> countBlankNodeIds(e, frequencies));
+        } else if (input instanceof Map) {
+            ((Map<?, ?>) input).entrySet().forEach(e -> countBlankNodeIds(e.getValue(), frequencies));
+        } else if (input instanceof String) {
+            String p = (String) input;
+            if (p.startsWith("_:")) {
+                frequencies.put(p, frequencies.containsKey(p) ? frequencies.get(p) + 1 : 1);
+            }
+        }
+        return frequencies;
     }
 
     /**
